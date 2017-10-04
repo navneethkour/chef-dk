@@ -26,10 +26,14 @@ group(:omnibus_package, :development, :test) do
   gem "pry"
   gem "rdoc"
   gem "yard"
-  gem "dep_selector"
   gem "guard"
   gem "cookstyle", ">= 2.0.0"
   gem "foodcritic", ">= 11.2"
+end
+
+group(:dep_selector) do
+  gem "dep_selector"
+  gem "dep-selector-libgecode"
 end
 
 # We tend to track latest stable release without pinning.
@@ -42,7 +46,8 @@ group(:omnibus_package) do
   gem "chef-provisioning", ">= 2.4.0"
   gem "chef-provisioning-aws", ">= 2.0"
   gem "chef-provisioning-azure", ">= 0.6.0"
-  gem "chef-provisioning-fog", ">= 0.20.0"
+  # As of October 2017, `chef-provisioning-fog` makes the Gemset unsolvable by bundler
+  # gem "chef-provisioning-fog", ">= 0.20.0"
   gem "chef-vault"
   gem "chef", "= 13.4.24"
   gem "cheffish", ">= 13.0"
@@ -73,7 +78,6 @@ group(:omnibus_package) do
 
   # All of the following used to be software definitions we included:
   gem "knife-spork"
-  gem "dep-selector-libgecode"
   gem "mixlib-install"
   gem "nokogiri"
   gem "pry-byebug"
