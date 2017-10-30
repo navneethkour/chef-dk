@@ -20,6 +20,7 @@ require "forwardable"
 
 require "solve"
 require "chef/run_list"
+require "chef/mixin/deep_merge"
 
 require "chef-dk/policyfile/dsl"
 require "chef-dk/policyfile/attribute_merge_checker"
@@ -129,11 +130,17 @@ module ChefDK
     end
 
     def default_attributes
-      dsl.node_attributes.combined_default.to_hash
+      included_policies.map {|p| p.policyfile_lock }.inject(
+        dsl.node_attributes.combined_default.to_hash) do |acc, lock|
+          Chef::Mixin::DeepMerge.merge(acc, lock.default_attributes)
+      end
     end
 
     def override_attributes
-      dsl.node_attributes.combined_override.to_hash
+      included_policies.map {|p| p.policyfile_lock }.inject(
+        dsl.node_attributes.combined_override.to_hash) do |acc, lock|
+          Chef::Mixin::DeepMerge.merge(acc, lock.override_attributes)
+      end
     end
 
     def check_for_default_attribute_conflicts!
