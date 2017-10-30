@@ -22,6 +22,7 @@ require "solve"
 require "chef/run_list"
 
 require "chef-dk/policyfile/dsl"
+require "chef-dk/policyfile/attribute_merge_checker"
 require "chef-dk/policyfile_lock"
 require "chef-dk/ui"
 require "chef-dk/policyfile/reports/install"
@@ -135,6 +136,31 @@ module ChefDK
       dsl.node_attributes.combined_override.to_hash
     end
 
+    def check_for_default_attribute_conflicts!
+      checker = Policyfile::AttributeMergeChecker.new
+      checker.with_attributes("user-specified", dsl.node_attributes.combined_default)
+      included_policies.map do |policy_spec|
+        lock = policy_spec.policyfile_lock
+        checker.with_attributes(policy_spec.name, lock.default_attributes)
+      end
+      checker.check!
+    end
+
+    def check_for_override_attribute_conflicts!
+      checker = Policyfile::AttributeMergeChecker.new
+      checker.with_attributes("user-specified", dsl.node_attributes.combined_override)
+      included_policies.map do |policy_spec|
+        lock = policy_spec.policyfile_lock
+        checker.with_attributes(policy_spec.name, lock.override_attributes)
+      end
+      checker.check!
+    end
+
+    def check_for_attribute_conflicts!
+      check_for_default_attribute_conflicts!
+      check_for_override_attribute_conflicts!
+    end
+
     def lock
       @policyfile_lock ||= PolicyfileLock.build_from_compiler(self, storage_config)
     end
@@ -178,6 +204,8 @@ module ChefDK
 
         raise CookbookDoesNotContainRequiredRecipe, message
       end
+
+      check_for_attribute_conflicts!
     end
 
     def create_spec_for_cookbook(cookbook_name, version)
