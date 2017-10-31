@@ -37,7 +37,7 @@ describe ChefDK::PolicyfileCompiler, "including upstream policy locks" do
     end
   end
 
-  let(:default_source) { nil }
+  let(:default_source) { {:supermarket => "https://example.com" }}
 
   let(:external_cookbook_universe) {
     {
@@ -55,6 +55,9 @@ describe ChefDK::PolicyfileCompiler, "including upstream policy locks" do
       },
       "local" => {
         "1.0.0" => [ ["cookbookC", "= 1.0.0" ] ],
+      },
+      "local_easy" => {
+        "1.0.0" => [ ["cookbookC", "= 2.0.0" ] ],
       }
     }
   }
@@ -82,7 +85,7 @@ describe ChefDK::PolicyfileCompiler, "including upstream policy locks" do
       allow(p.default_source.first).to receive(:universe_graph).and_return(external_cookbook_universe)
     end
 
-    lock_data = policyfile.lock
+    policyfile.lock
   end
 
   let(:policyfile_lock_a_spec) do
@@ -197,14 +200,20 @@ describe ChefDK::PolicyfileCompiler, "including upstream policy locks" do
     end
 
     context "when some cookbooks are shared as dependencies or transitive dependencies" do
+      let(:policyfile_lock_a_run_list) { ["cookbookC::default"] }
 
       context "and the including policy's dependencies can be solved with the included policy's locks" do
+        let(:run_list) { ["local_easy::default"] }
 
-        it "solves the dependencies added by the top-level policyfile and emits them in the lockfile"
+        it "solves the dependencies added by the top-level policyfile and emits them in the lockfile" do
+          expect(policyfile_lock.to_lock["solution_dependencies"]["dependencies"]).to(
+            have_key("cookbookC (2.0.0)"))
+        end
 
       end
 
       context "and the including policy's dependencies cannot be solved with the included policy's locks" do
+        let(:run_list) { ["local::default"] }
 
         it "raises an error describing the conflict"
 
