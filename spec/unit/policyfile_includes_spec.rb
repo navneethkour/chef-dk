@@ -95,6 +95,7 @@ describe ChefDK::PolicyfileCompiler, "including upstream policy locks" do
   end
 
   context "when no policies are included" do
+
     it "does not emit included policies information in the lockfile" do
       expect(policyfile_lock.to_lock["included_policies"]).to eq(nil)
     end
@@ -102,6 +103,7 @@ describe ChefDK::PolicyfileCompiler, "including upstream policy locks" do
   end
 
   context "when one policy is included" do
+
     let(:included_policies) { [policyfile_lock_a_spec] }
 
     it "emits a lockfile describing the source of the included policy"
@@ -109,8 +111,11 @@ describe ChefDK::PolicyfileCompiler, "including upstream policy locks" do
     # currently you must have a run list in a policyfile, but it should now
     # become possible to make a combo-policy just by combining other policies
     context "when the including policy does not have a run list" do
+      let(:run_list) { [] }
 
-      it "emits a lockfile with an identical run list as the included policy"
+      it "emits a lockfile with an identical run list as the included policy" do
+        expect(policyfile_lock.to_lock["run_list"]).to eq(policyfile_lock_a_runlist_expanded)
+      end
 
     end
 
