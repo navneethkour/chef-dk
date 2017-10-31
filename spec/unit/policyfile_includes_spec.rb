@@ -21,14 +21,88 @@ require "chef-dk/policyfile_compiler"
 
 describe ChefDK::PolicyfileCompiler, "including upstream policy locks" do
 
-  context "when no policies are included" do
+  def expand_runlist(r)
+    r.map do |item|
+      "recipe[#{item}]"
+    end
+  end
 
-    # TODO: an empty array here is probably fine?
-    it "does not emit included policies information in the lockfile"
+  let(:run_list) { ["local::default"] }
+  let(:run_list_expanded) { expand_runlist(run_list) }
+
+  let(:default_source) { nil }
+
+  let(:external_cookbook_universe) {
+    {
+      "cookbookA" => {
+        "1.0.0" => [ ],
+        "2.0.0" => [ ],
+      },
+      "cookbookB" => {
+        "1.0.0" => [ ],
+        "2.0.0" => [ ],
+      },
+      "cookbookC" => {
+        "1.0.0" => [ ],
+        "2.0.0" => [ ],
+      },
+      "local" => {
+        "1.0.0" => [ ["cookbookC", "= 1.0.0" ] ],
+      }
+    }
+  }
+
+  let(:policyfile_lock_a_name) { "policyfile_lock_a" }
+  let(:policyfile_lock_a_runlist) { ["cookbookA::default"] }
+  let(:policyfile_lock_a_runlist_expanded) { expand_runlist(policyfile_lock_a_runlist) }
+  let(:policyfile_lock_a) do
+    policyfile = ChefDK::PolicyfileCompiler.new.build do |p|
+
+      p.default_source(*default_source) if default_source
+      p.run_list(policyfile_lock_a_runlist)
+
+      allow(p.default_source.first).to receive(:universe_graph).and_return(external_cookbook_universe)
+    end
+
+    lock_data = policyfile.lock
+  end
+
+  let(:policyfile_lock_a_spec) do
+    ChefDK::Policyfile::PolicyfileLocationSpecification.new(policyfile_lock_a_name, {:local => "somelocation"}, nil).tap do |spec|
+      allow(spec).to receive(:valid?).and_return(true)
+      allow(spec).to receive(:ensure_cached)
+      allow(spec).to receive(:policyfile_lock).and_return(policyfile_lock_a)
+    end
+  end
+
+  let (:included_policies) { [] }
+
+  let(:policyfile) do
+    policyfile = ChefDK::PolicyfileCompiler.new.build do |p|
+
+      p.default_source(*default_source) if default_source
+      p.run_list(*run_list)
+
+      allow(p).to receive(:included_policies).and_return(included_policies)
+      allow(p.default_source.first).to receive(:universe_graph).and_return(external_cookbook_universe)
+    end
+
+    policyfile
+  end
+
+  let(:policyfile_lock) do
+    policyfile.lock
+  end
+
+  context "when no policies are included" do
+    it "does not emit included policies information in the lockfile" do
+      expect(policyfile_lock.to_lock["included_policies"]).to eq(nil)
+    end
 
   end
 
   context "when one policy is included" do
+    let(:included_policies) { [policyfile_lock_a_spec] }
 
     it "emits a lockfile describing the source of the included policy"
 
@@ -42,7 +116,9 @@ describe ChefDK::PolicyfileCompiler, "including upstream policy locks" do
 
     context "when the including policy has a run list" do
 
-      it "appends run list items from the including policy to the included policy's run list, removing duplicates"
+      it "appends run list items from the including policy to the included policy's run list, removing duplicates" do
+        expect(policyfile_lock.to_lock["run_list"]).to eq(policyfile_lock_a_runlist_expanded + run_list_expanded)
+      end
 
     end
 
