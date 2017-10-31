@@ -64,7 +64,7 @@ describe ChefDK::PolicyfileCompiler, "including upstream policy locks" do
   let(:policyfile_lock_a_run_list_expanded) { expand_run_list(policyfile_lock_a_run_list) }
   let(:policyfile_lock_a_named_run_list) { {} }
   let(:policyfile_lock_a_named_run_list_expanded) do
-    named_run_list.inject({}) do |acc, (key, val)|
+    policyfile_lock_a_named_run_list.inject({}) do |acc, (key, val)|
       acc[key] = expand_run_list(val)
       acc
     end
@@ -152,7 +152,7 @@ describe ChefDK::PolicyfileCompiler, "including upstream policy locks" do
 
       let(:policyfile_lock_a_named_run_list) do
         {
-          "included" => ["cookbookA::included"]
+          "shared" => ["cookbookA::included"]
         }
       end
 
@@ -172,7 +172,15 @@ describe ChefDK::PolicyfileCompiler, "including upstream policy locks" do
 
       context "and some named run lists are shared between the including and included policy" do
 
-        it "appends run lists items from the including policy's run lists to the included policy's run lists, removing duplicates"
+        let(:named_run_list) do
+          {
+            "shared" => ["local::foo"]
+          }
+        end
+
+        it "appends run lists items from the including policy's run lists to the included policy's run lists, removing duplicates" do
+          expect(policyfile_lock.to_lock["named_run_lists"]["shared"]).to eq(policyfile_lock_a_named_run_list_expanded["shared"] + named_run_list_expanded["shared"])
+        end
 
       end
 
