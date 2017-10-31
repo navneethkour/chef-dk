@@ -223,6 +223,14 @@ describe ChefDK::PolicyfileCompiler, "including upstream policy locks" do
 
       end
 
+      context "and the including policy explicitly sets the source for a cookbook which conflicts with the source in the included policy" do
+
+        it "raises an error describing the conflict"
+
+        it "includes the name and location of the included policy in the error message"
+
+      end
+
     end
 
     context "when the included policy does not have attributes that conflict with the including policy" do
