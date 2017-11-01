@@ -271,9 +271,7 @@ module ChefDK
     def cookbook_demands_from_policies
       included_policies.map do |policy_spec|
         lock = policy_spec.policyfile_lock
-        lock.cookbook_locks.map do |ck_name, location_spec|
-          [ck_name, "= #{location_spec.version}"]
-        end
+        lock.solution_dependencies.to_lock["Policyfile"]
       end.flatten(1)
     end
 

@@ -37,7 +37,7 @@ describe ChefDK::PolicyfileCompiler, "including upstream policy locks" do
     end
   end
 
-  let(:default_source) { nil }
+  let(:default_source) { ChefDK::Policyfile::CommunityCookbookSource.new }
 
   let(:external_cookbook_universe) {
     {
@@ -61,6 +61,42 @@ describe ChefDK::PolicyfileCompiler, "including upstream policy locks" do
       }
     }
   }
+  
+  before do
+    allow(default_source).to receive(:universe_graph).and_return(external_cookbook_universe)
+  end
+
+  before do
+    external_cookbook_universe.each do |(name, versions)|
+      versions.each do |(version, deps)|
+        s = "Cookbook '#{name}'"
+        s << " = #{version}"
+
+        location_spec = instance_double("ChefDK::Policyfile::CookbookLocationSpecification",
+                                                    name: "#{name}",
+                                                    version_constraint: Semverse::Constraint.new("= #{version}"),
+                                                    ensure_cached: nil,
+                                                    cookbook_has_recipe?: true,
+                                                    mirrors_canonical_upstream?: true,
+                                                    cache_key: "#{name}-#{version}",
+                                                    installer: nil,
+                                                    installed?: true,
+                                                    uri: "uri",
+                                                    source_options_for_lock: {},
+                                                    to_s: s)
+        allow(location_spec).to receive(:installed?).and_return(true)
+
+        allow(ChefDK::Policyfile::CookbookLocationSpecification).to receive(:new).
+          with(name, "= #{version}", anything(), anything()).and_return(location_spec)
+
+        allow(default_source).to receive(:source_options_for).with(name,version).and_return({
+          artifactserver: "download-#{name}-#{version}",
+          version: version
+        })
+
+      end
+    end
+  end
 
   let(:policyfile_lock_a_name) { "policyfile_lock_a" }
   let(:policyfile_lock_a_run_list) { ["cookbookA::default"] }
@@ -76,16 +112,20 @@ describe ChefDK::PolicyfileCompiler, "including upstream policy locks" do
   let(:policyfile_lock_a) do
     policyfile = ChefDK::PolicyfileCompiler.new.build do |p|
 
-      p.default_source(*default_source) if default_source
+      p.default_source.replace([default_source]) if default_source
       p.run_list(policyfile_lock_a_run_list)
       policyfile_lock_a_named_run_list.each do |name, run_list|
         p.named_run_list(name, *run_list)
       end
-
-      allow(p.default_source.first).to receive(:universe_graph).and_return(external_cookbook_universe)
     end
-
-    policyfile.lock
+    policyfile.install
+    policyfile.lock.tap do |lock|
+      lock.cookbook_locks.each do |name, cookbook_lock|
+        allow(cookbook_lock).to receive(:validate!)
+        allow(cookbook_lock).to receive(:refresh!)
+        allow(cookbook_lock).to receive(:gather_profile_data)
+      end
+    end
   end
 
   let(:policyfile_lock_a_spec) do
@@ -101,21 +141,27 @@ describe ChefDK::PolicyfileCompiler, "including upstream policy locks" do
   let(:policyfile) do
     policyfile = ChefDK::PolicyfileCompiler.new.build do |p|
 
-      p.default_source(*default_source) if default_source
+      p.default_source.replace([default_source]) if default_source
       p.run_list(*run_list)
       named_run_list.each do |name, run_list|
         p.named_run_list(name, *run_list)
       end
 
       allow(p).to receive(:included_policies).and_return(included_policies)
-      allow(p.default_source.first).to receive(:universe_graph).and_return(external_cookbook_universe)
     end
 
     policyfile
   end
 
   let(:policyfile_lock) do
-    policyfile.lock
+    policyfile.install
+    policyfile.lock.tap do |lock|
+      lock.cookbook_locks.each do |name, cookbook_lock|
+        allow(cookbook_lock).to receive(:validate!)
+        allow(cookbook_lock).to receive(:refresh!)
+        allow(cookbook_lock).to receive(:gather_profile_data)
+      end
+    end
   end
 
   context "when no policies are included" do
@@ -215,18 +261,7 @@ describe ChefDK::PolicyfileCompiler, "including upstream policy locks" do
       context "and the including policy's dependencies cannot be solved with the included policy's locks" do
         let(:run_list) { ["local::default"] }
 
-        it "raises an error describing the conflict", :focus do
-          policyfile_lock_a.tap do |lock|
-            lock.cached_cookbook("cookbookC") do |c|
-              c.origin = "https://artifact-server.example/cookbookC/2.0.0"
-              c.cache_key = "cookbookC-2.0.0"
-              c.source_options = { artifactserver: "https://artifact-server.example/cookbookC/2.0.0", version: "2.0.0" }
-              c.version = "2.0.0"
-              allow(c).to receive(:validate!)
-              allow(c).to receive(:refresh!)
-              allow(c).to receive(:gather_profile_data)
-            end
-          end
+        it "raises an error describing the conflict" do
           expect{policyfile_lock.to_lock}.to raise_error(Solve::Errors::NoSolutionError)
         end
 
