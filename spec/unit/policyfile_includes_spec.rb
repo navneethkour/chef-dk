@@ -37,6 +37,7 @@ describe ChefDK::PolicyfileCompiler, "including upstream policy locks" do
     end
   end
   let(:default_attributes) { {} }
+  let(:override_attributes) { {} }
 
   let(:default_source) { nil }
 
@@ -64,6 +65,7 @@ describe ChefDK::PolicyfileCompiler, "including upstream policy locks" do
   }
   
   let(:included_policy_default_attributes) { {} }
+  let(:included_policy_override_attributes) { {} }
   let(:included_policy_expanded_named_runlist) { nil }
   let(:included_policy_expanded_runlist) { ["recipe[cookbookA::default]"] }
   let(:included_policy_cookbooks) {
@@ -98,7 +100,7 @@ describe ChefDK::PolicyfileCompiler, "including upstream policy locks" do
       "run_list" => included_policy_expanded_runlist,
       "cookbook_locks" => cookbook_locks,
       "default_attributes" => included_policy_default_attributes,
-      "override_attributes" => {},
+      "override_attributes" => included_policy_override_attributes,
       "solution_dependencies" => {
         "Policyfile"=> solution_dependencies_lock,
         ## We dont use dependencies, no need to fill it out
@@ -133,6 +135,10 @@ describe ChefDK::PolicyfileCompiler, "including upstream policy locks" do
 
       default_attributes.each do |(name, value)|
         p.default[name] = value
+      end
+
+      override_attributes.each do |(name, value)|
+        p.override[name] = value
       end
 
       allow(p).to receive(:included_policies).and_return(included_policies)
@@ -340,6 +346,59 @@ describe ChefDK::PolicyfileCompiler, "including upstream policy locks" do
 
       end
     end
+
+    context "when override attributes are specified" do
+      let(:override_attributes) {
+        {
+          "shared" => {
+            "foo" => "bar"
+          }
+        }
+      }
+      context "when the included policy does not have attributes that conflict with the including policy" do
+        let(:included_policy_override_attributes) {
+          {
+            "not_shared" => {
+              "foo" => "bar"
+            }
+          }
+        }
+
+        it "emits a lockfile with the attributes from both merged" do
+          expect(policyfile_lock.to_lock["override_attributes"]).to include(included_policy_override_attributes, override_attributes)
+        end
+
+      end
+
+      context "when the included policy has attributes that conflict with the including policy, but provide the same value" do
+        let(:included_policy_override_attributes) { override_attributes }
+
+        it "emits a lockfile with the attributes from both merged" do
+          expect(policyfile_lock.to_lock["override_attributes"]).to eq(override_attributes)
+        end
+
+      end
+
+      context "when the included policy has attributes that conflict with the including policy's attributes" do
+        let(:included_policy_override_attributes) {
+          {
+            "shared" => {
+              "foo" => "not_bar"
+            }
+          }
+        }
+
+        it "raises an error describing all attribute conflicts" do
+          expect{policyfile_lock.to_lock}.to raise_error(ChefDK::Policyfile::AttributeMergeChecker::ConflictError)
+        end
+
+        it "includes the name and location of the included policy in the error message"
+
+        it "includes the source location of the conflicting attribute in the including policy"
+
+      end
+    end
+
 
   end
 
