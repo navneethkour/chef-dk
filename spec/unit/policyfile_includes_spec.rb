@@ -248,7 +248,13 @@ describe ChefDK::PolicyfileCompiler, "including upstream policy locks" do
           expect{policyfile_lock.to_lock}.to raise_error(Solve::Errors::NoSolutionError)
         end
 
-        it "includes the name and location of the included policy in the error message"
+        it "includes the name and location of the included policy in the error message" do
+          pending("Not implemented")
+          expect{policyfile_lock.to_lock}.to raise_error(Solve::Errors::NoSolutionError) do |e|
+            expect(e.to_s).to match(/#{included_policy_lock_name}/)
+          end
+
+        end
 
         it "includes the source of the conflicting dependency constraint from the including policy" do
           expect{policyfile_lock.to_lock}.to raise_error(Solve::Errors::NoSolutionError) do |e|
@@ -260,7 +266,7 @@ describe ChefDK::PolicyfileCompiler, "including upstream policy locks" do
         it "should not have an open constraint on cookbookC" do
           pending("I think this is a bug")
           expect{policyfile_lock.to_lock}.to raise_error(Solve::Errors::NoSolutionError) do |e|
-            expect(e.to_s).not_to match(/`cookbookC \(>= 0.0.0\)`/) # This one comes from the included policy
+            expect(e.to_s).not_to match(/`cookbookC \(>= 0.0.0\)`/)
           end
         end
 
