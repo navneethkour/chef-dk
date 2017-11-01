@@ -130,6 +130,7 @@ module ChefDK
     end
 
     def default_attributes
+      check_for_default_attribute_conflicts!
       included_policies.map {|p| p.policyfile_lock }.inject(
         dsl.node_attributes.combined_default.to_hash) do |acc, lock|
           Chef::Mixin::DeepMerge.merge(acc, lock.default_attributes)
@@ -137,6 +138,7 @@ module ChefDK
     end
 
     def override_attributes
+      check_for_override_attribute_conflicts!
       included_policies.map {|p| p.policyfile_lock }.inject(
         dsl.node_attributes.combined_override.to_hash) do |acc, lock|
           Chef::Mixin::DeepMerge.merge(acc, lock.override_attributes)
@@ -161,11 +163,6 @@ module ChefDK
         checker.with_attributes(policy_spec.name, lock.override_attributes)
       end
       checker.check!
-    end
-
-    def check_for_attribute_conflicts!
-      check_for_default_attribute_conflicts!
-      check_for_override_attribute_conflicts!
     end
 
     def lock
@@ -211,8 +208,6 @@ module ChefDK
 
         raise CookbookDoesNotContainRequiredRecipe, message
       end
-
-      check_for_attribute_conflicts!
     end
 
     def create_spec_for_cookbook(cookbook_name, version)
