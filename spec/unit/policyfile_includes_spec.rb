@@ -37,7 +37,7 @@ describe ChefDK::PolicyfileCompiler, "including upstream policy locks" do
     end
   end
 
-  let(:default_source) { {:supermarket => "https://example.com" }}
+  let(:default_source) { nil }
 
   let(:external_cookbook_universe) {
     {
@@ -215,7 +215,20 @@ describe ChefDK::PolicyfileCompiler, "including upstream policy locks" do
       context "and the including policy's dependencies cannot be solved with the included policy's locks" do
         let(:run_list) { ["local::default"] }
 
-        it "raises an error describing the conflict"
+        it "raises an error describing the conflict", :focus do
+          policyfile_lock_a.tap do |lock|
+            lock.cached_cookbook("cookbookC") do |c|
+              c.origin = "https://artifact-server.example/cookbookC/2.0.0"
+              c.cache_key = "cookbookC-2.0.0"
+              c.source_options = { artifactserver: "https://artifact-server.example/cookbookC/2.0.0", version: "2.0.0" }
+              c.version = "2.0.0"
+              allow(c).to receive(:validate!)
+              allow(c).to receive(:refresh!)
+              allow(c).to receive(:gather_profile_data)
+            end
+          end
+          expect{policyfile_lock.to_lock}.to raise_error(Solve::Errors::NoSolutionError)
+        end
 
         it "includes the name and location of the included policy in the error message"
 
