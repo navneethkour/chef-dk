@@ -37,7 +37,7 @@ describe ChefDK::PolicyfileCompiler, "including upstream policy locks" do
     end
   end
 
-  let(:default_source) { ChefDK::Policyfile::CommunityCookbookSource.new }
+  let(:default_source) { nil }
 
   let(:external_cookbook_universe) {
     {
@@ -62,77 +62,58 @@ describe ChefDK::PolicyfileCompiler, "including upstream policy locks" do
     }
   }
   
-  before do
-    allow(default_source).to receive(:universe_graph).and_return(external_cookbook_universe)
-  end
+  let(:included_policy_expanded_named_runlist) { nil }
+  let(:included_policy_expanded_runlist) { ["recipe[cookbookA::default]"] }
+  let(:included_policy_cookbooks) {
+    [
+      {
+        name: "cookbookA",
+        version: "2.0.0"
+      }
+    ]
+  }
 
-  before do
-    external_cookbook_universe.each do |(name, versions)|
-      versions.each do |(version, deps)|
-        s = "Cookbook '#{name}'"
-        s << " = #{version}"
-
-        location_spec = instance_double("ChefDK::Policyfile::CookbookLocationSpecification",
-                                                    name: "#{name}",
-                                                    version_constraint: Semverse::Constraint.new("= #{version}"),
-                                                    ensure_cached: nil,
-                                                    cookbook_has_recipe?: true,
-                                                    mirrors_canonical_upstream?: true,
-                                                    cache_key: "#{name}-#{version}",
-                                                    installer: nil,
-                                                    installed?: true,
-                                                    uri: "uri",
-                                                    source_options_for_lock: {},
-                                                    to_s: s)
-        allow(location_spec).to receive(:installed?).and_return(true)
-
-        allow(ChefDK::Policyfile::CookbookLocationSpecification).to receive(:new).
-          with(name, "= #{version}", anything(), anything()).and_return(location_spec)
-
-        allow(default_source).to receive(:source_options_for).with(name,version).and_return({
-          artifactserver: "download-#{name}-#{version}",
-          version: version
-        })
-
-      end
-    end
-  end
-
-  let(:policyfile_lock_a_name) { "policyfile_lock_a" }
-  let(:policyfile_lock_a_run_list) { ["cookbookA::default"] }
-  let(:policyfile_lock_a_run_list_expanded) { expand_run_list(policyfile_lock_a_run_list) }
-  let(:policyfile_lock_a_named_run_list) { {} }
-  let(:policyfile_lock_a_named_run_list_expanded) do
-    policyfile_lock_a_named_run_list.inject({}) do |acc, (key, val)|
-      acc[key] = expand_run_list(val)
+  let(:included_policy_lock_data) do
+    cookbook_locks = included_policy_cookbooks.inject({}) do |acc, cookbook_info|
+      acc[cookbook_info[:name]] = {
+        "version" => cookbook_info[:version],
+        "identifier" => "identifier",
+        "dotted_decimal_identifier" => "dotted_decimal_identifier",
+        "cache_key" => "#{cookbook_info[:name]}-#{cookbook_info[:version]}",
+        "origin" => "uri",
+        "source_options" => {}
+      }
       acc
     end
+
+    solution_dependencies_lock = included_policy_cookbooks.map do |cookbook_info|
+      [cookbook_info[:name], cookbook_info[:version]]
+    end
+
+    {
+      "name" => "included_policyfile",
+      "revision_id" => "myrevisionid",
+      "run_list" => included_policy_expanded_runlist,
+      "cookbook_locks" => cookbook_locks,
+      "default_attributes" => {},
+      "override_attributes" => {},
+      "solution_dependencies" => {
+        "Policyfile"=> solution_dependencies_lock,
+        ## We dont use dependencies, no need to fill it out
+        "dependencies" => {}
+      }
+    }.tap do |core|
+      core["named_run_lists"] = included_policy_expanded_named_runlist if included_policy_expanded_named_runlist 
+    end
   end
 
-  let(:policyfile_lock_a) do
-    policyfile = ChefDK::PolicyfileCompiler.new.build do |p|
+  let(:included_policy_lock_name) { "included" }
 
-      p.default_source.replace([default_source]) if default_source
-      p.run_list(policyfile_lock_a_run_list)
-      policyfile_lock_a_named_run_list.each do |name, run_list|
-        p.named_run_list(name, *run_list)
-      end
-    end
-    policyfile.install
-    policyfile.lock.tap do |lock|
-      lock.cookbook_locks.each do |name, cookbook_lock|
-        allow(cookbook_lock).to receive(:validate!)
-        allow(cookbook_lock).to receive(:refresh!)
-        allow(cookbook_lock).to receive(:gather_profile_data)
-      end
-    end
-  end
-
-  let(:policyfile_lock_a_spec) do
-    ChefDK::Policyfile::PolicyfileLocationSpecification.new(policyfile_lock_a_name, {:local => "somelocation"}, nil).tap do |spec|
+  let(:included_policy_lock_spec) do
+    ChefDK::Policyfile::PolicyfileLocationSpecification.new(included_policy_lock_name, {:local => "somelocation"}, nil).tap do |spec|
       allow(spec).to receive(:valid?).and_return(true)
       allow(spec).to receive(:ensure_cached)
-      allow(spec).to receive(:policyfile_lock).and_return(policyfile_lock_a)
+      allow(spec).to receive(:lock_data).and_return(included_policy_lock_data)
     end
   end
 
@@ -148,20 +129,14 @@ describe ChefDK::PolicyfileCompiler, "including upstream policy locks" do
       end
 
       allow(p).to receive(:included_policies).and_return(included_policies)
+      allow(p.default_source.first).to receive(:universe_graph).and_return(external_cookbook_universe)
     end
 
     policyfile
   end
 
   let(:policyfile_lock) do
-    policyfile.install
-    policyfile.lock.tap do |lock|
-      lock.cookbook_locks.each do |name, cookbook_lock|
-        allow(cookbook_lock).to receive(:validate!)
-        allow(cookbook_lock).to receive(:refresh!)
-        allow(cookbook_lock).to receive(:gather_profile_data)
-      end
-    end
+    policyfile.lock
   end
 
   context "when no policies are included" do
@@ -174,7 +149,7 @@ describe ChefDK::PolicyfileCompiler, "including upstream policy locks" do
 
   context "when one policy is included" do
 
-    let(:included_policies) { [policyfile_lock_a_spec] }
+    let(:included_policies) { [included_policy_lock_spec] }
 
     it "emits a lockfile describing the source of the included policy"
 
@@ -184,7 +159,7 @@ describe ChefDK::PolicyfileCompiler, "including upstream policy locks" do
       let(:run_list) { [] }
 
       it "emits a lockfile with an identical run list as the included policy" do
-        expect(policyfile_lock.to_lock["run_list"]).to eq(policyfile_lock_a_run_list_expanded)
+        expect(policyfile_lock.to_lock["run_list"]).to eq(included_policy_expanded_runlist)
       end
 
     end
@@ -192,16 +167,16 @@ describe ChefDK::PolicyfileCompiler, "including upstream policy locks" do
     context "when the including policy has a run list" do
 
       it "appends run list items from the including policy to the included policy's run list, removing duplicates" do
-        expect(policyfile_lock.to_lock["run_list"]).to eq(policyfile_lock_a_run_list_expanded + run_list_expanded)
+        expect(policyfile_lock.to_lock["run_list"]).to eq(included_policy_expanded_runlist + run_list_expanded)
       end
 
     end
 
     context "when the policies have named run lists" do
 
-      let(:policyfile_lock_a_named_run_list) do
+      let(:included_policy_expanded_named_runlist) do
         {
-          "shared" => ["cookbookA::included"]
+          "shared" => ["recipe[cookbookA::included]"]
         }
       end
 
@@ -214,7 +189,7 @@ describe ChefDK::PolicyfileCompiler, "including upstream policy locks" do
         end
 
         it "preserves the named run lists as given in both policies" do
-          expect(policyfile_lock.to_lock["named_run_lists"]).to include(policyfile_lock_a_named_run_list_expanded, named_run_list_expanded)
+          expect(policyfile_lock.to_lock["named_run_lists"]).to include(included_policy_expanded_named_runlist, named_run_list_expanded)
         end
 
       end
@@ -227,8 +202,8 @@ describe ChefDK::PolicyfileCompiler, "including upstream policy locks" do
           }
         end
 
-        it "appends run lists items from the including policy's run lists to the included policy's run lists, removing duplicates" do
-          expect(policyfile_lock.to_lock["named_run_lists"]["shared"]).to eq(policyfile_lock_a_named_run_list_expanded["shared"] + named_run_list_expanded["shared"])
+        it "appends run lists items from the including policy's run lists to the included policy's run lists" do
+          expect(policyfile_lock.to_lock["named_run_lists"]["shared"]).to eq(included_policy_expanded_named_runlist["shared"] + named_run_list_expanded["shared"])
         end
 
       end
@@ -246,7 +221,15 @@ describe ChefDK::PolicyfileCompiler, "including upstream policy locks" do
     end
 
     context "when some cookbooks are shared as dependencies or transitive dependencies" do
-      let(:policyfile_lock_a_run_list) { ["cookbookC::default"] }
+      let(:included_policy_expanded_runlist) { ["recipe[cookbookC::default]"] }
+      let(:included_policy_cookbooks) {
+        [
+          {
+            name: "cookbookC",
+            version: "2.0.0"
+          }
+        ]
+      }
 
       context "and the including policy's dependencies can be solved with the included policy's locks" do
         let(:run_list) { ["local_easy::default"] }
